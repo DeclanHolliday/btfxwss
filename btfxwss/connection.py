@@ -248,29 +248,19 @@ class WebSocketConnection(Thread):
                            "Issuing reconnect..")
             self.reconnect()
 
-    def send(self,key=None, secret=None, list_data=None, auth=False, **kwargs):
+    def send(self, message):
         """Sends the given Payload to the API via the websocket connection.
 
-        :param kwargs: payload paarameters as key=value pairs
+        :param message: btfxwss.Message instance
         :return:
         """
-        if auth:
-            nonce = str(int(time.time() * 10000000))
-            auth_string = 'AUTH' + nonce
-            auth_sig = hmac.new(self.secret.encode(), auth_string.encode(),
-                                hashlib.sha384).hexdigest()
-
-            payload = {'event': 'auth', 'apiKey': self.key, 'authSig': auth_sig,
-                       'authPayload': auth_string, 'authNonce': nonce}
-        if list_data:
-            payload = json.dumps(list_data)
-        else:
-            payload = json.dumps(kwargs)
+        payload = message.pack()
         self.log.debug("send(): Sending payload to API: %s", payload)
         try:
             self.socket.send(payload)
         except websocket.WebSocketConnectionClosedException:
             self.log.error("send(): Did not send out payload %s - client not connected. ", kwargs)
+        self.channel_configs[time.time()] = message
 
 
     def pass_to_client(self, event, data, *args):
@@ -444,9 +434,6 @@ class WebSocketConnection(Thread):
                 identifier, q = self.channel_configs.popitem(last=True if soft else False)
             except KeyError:
                 break
-            if identifier == 'auth':
-                self.send(**q, auth=True)
-                continue
 
             q_list.append((identifier, q.copy()))
             if soft:
